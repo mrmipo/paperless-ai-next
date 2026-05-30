@@ -43,6 +43,7 @@ const TESTS = {
   'ocr-fallback-ai-errors': 'test-ocr-fallback-ai-errors.js',
   'ocr-startup-recovery': 'test-ocr-startup-recovery.js',
   'pr772-fix': 'test-pr772-fix.js',
+  'ollama-temperature-wiring': 'test-ollama-temperature-wiring.js',
   'rate-limiting': 'test-rate-limiting.js',
   'scan-stop-flow': 'test-scan-stop-flow.js',
   'setup-auth-endpoint-protection': 'test-setup-auth-endpoint-protection.js',
@@ -69,6 +70,7 @@ const AREAS = {
     'effective-document-count-cache',
     'failed-reset-all',
     'injected-env-priority',
+    'ollama-temperature-wiring',
     'pr772-fix',
     'scan-stop-flow',
     'thumbnail-startup-migration'

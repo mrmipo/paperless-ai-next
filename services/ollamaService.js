@@ -578,7 +578,7 @@ class OllamaService {
             stream: false,
             format: schema,
             options: {
-                temperature: 0.7,
+                temperature: config.aiTemperatureAnalysis,
                 top_p: 0.9,
                 repeat_penalty: 1.1,
                 top_k: 7,
@@ -736,7 +736,7 @@ class OllamaService {
                 system: systemPrompt,
                 stream: false,
                 options: {
-                    temperature: 0.7,
+                    temperature: config.aiTemperatureGeneration,
                     top_p: 0.9,
                     num_predict: 1024,
                     num_ctx: numCtx
