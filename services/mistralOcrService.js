@@ -355,7 +355,10 @@ class MistralOcrService {
     }
 
     // Apply updates to Paperless
-    await PaperlessService.updateDocument(documentId, updateData);
+    const updatedDocument = await PaperlessService.updateDocument(documentId, updateData);
+    if (!updatedDocument) {
+      throw new Error(`Paperless update failed for document ${documentId}`);
+    }
 
     // Persist metrics & history
     if (analysis.metrics) {

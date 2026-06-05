@@ -510,6 +510,21 @@ function validateCustomFieldValue(fieldName, rawValue, dataType) {
         };
     }
 
+    if (dataType === 'monetary') {
+        // Normalize common AI formatting artefacts: spaces and thousand separators.
+        // Examples: "EUR 4,550.00" -> "EUR4550.00", "4,550.00" -> "4550.00".
+        const normalizedValue = strValue.replace(/\s+/g, '').replace(/,/g, '');
+
+        if (!/\d/.test(normalizedValue)) {
+            return {
+                skip: true,
+                warn: `[WARN] Custom field "${fieldName}" has invalid monetary value "${strValue}", skipping`
+            };
+        }
+
+        return { skip: false, value: normalizedValue };
+    }
+
     // Paperless-ngx enforces a 128-character limit on STRING custom fields
     if (dataType === 'string' && strValue.length > 128) {
         return {
