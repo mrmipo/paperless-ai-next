@@ -450,8 +450,10 @@ function validateUrlAgainstBase(urlToValidate, expectedBaseUrl) {
         return { valid: false, error: 'Invalid URL format' };
     }
 
-    // Validate that the host and protocol match the expected base
-    if (parsedUrl.origin !== parsedBase.origin) {
+    if (
+        parsedUrl.protocol !== parsedBase.protocol ||
+        parsedUrl.hostname.toLowerCase() !== parsedBase.hostname.toLowerCase()
+    ) {
         return { valid: false, error: 'URL origin does not match expected base URL' };
     }
 
@@ -506,6 +508,21 @@ function validateCustomFieldValue(fieldName, rawValue, dataType) {
             skip: true,
             warn: `[WARN] Custom field "${fieldName}" has invalid boolean value "${strValue}", skipping`
         };
+    }
+
+    if (dataType === 'monetary') {
+        // Normalize common AI formatting artefacts: spaces and thousand separators.
+        // Examples: "EUR 4,550.00" -> "EUR4550.00", "4,550.00" -> "4550.00".
+        const normalizedValue = strValue.replace(/\s+/g, '').replace(/,/g, '');
+
+        if (!/\d/.test(normalizedValue)) {
+            return {
+                skip: true,
+                warn: `[WARN] Custom field "${fieldName}" has invalid monetary value "${strValue}", skipping`
+            };
+        }
+
+        return { skip: false, value: normalizedValue };
     }
 
     // Paperless-ngx enforces a 128-character limit on STRING custom fields

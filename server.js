@@ -272,6 +272,7 @@ app.use((req, res, next) => {
   res.locals.appPaperlessNgxVersion = process.env.PAPERLESS_NGX_VERSION || 'unknown';
   res.locals.appAiProvider = config.aiProvider || process.env.AI_PROVIDER || 'openai';
   res.locals.appOcrEnabled = config.mistralOcr?.enabled === 'yes';
+  res.locals.appOcrProvider = config.mistralOcr?.provider || 'mistral';
   res.locals.appNodeEnv = process.env.NODE_ENV || 'production';
   res.locals.appNodeVersion = process.version;
   res.locals.appPlatform = `${process.platform} (${process.arch})`;
@@ -619,7 +620,6 @@ async function processDocument(doc, existingTags, existingCorrespondentList, exi
 
   // Clear retry count on success
   retryTracker.delete(doc.id);
-  await documentModel.setProcessingStatus(doc.id, doc.title, 'complete');
   return { analysis, originalData };
 }
 
@@ -762,18 +762,38 @@ async function saveDocumentChanges(docId, updateData, analysis, originalData) {
   const origDocType        = originalData.document_type ?? null;
   const origLanguage       = originalData.language ?? null;
 
-  await Promise.all([
-    documentModel.saveOriginalData(docId, originalTags, originalCorrespondent, originalTitle, origDocType, origLanguage),
-    paperlessService.updateDocument(docId, updateData),
+  await documentModel.saveOriginalData(docId, originalTags, originalCorrespondent, originalTitle, origDocType, origLanguage);
+
+  const updatedDocument = await paperlessService.updateDocument(docId, updateData);
+  if (!updatedDocument) {
+    throw new Error(`Paperless update failed for document ${docId}`);
+  }
+
+  const persistenceTasks = [
     documentModel.addProcessedDocument(docId, updateData.title),
-    documentModel.addOpenAIMetrics(
-      docId, 
-      analysis.metrics.promptTokens,
-      analysis.metrics.completionTokens,
-      analysis.metrics.totalTokens
-    ),
-    documentModel.addToHistory(docId, updateData.tags, updateData.title, analysis.document.correspondent, historyCustomFields, historyDocTypeName, historyLanguage)
-  ]);
+    documentModel.addToHistory(
+      docId,
+      updateData.tags,
+      updateData.title,
+      analysis.document.correspondent,
+      historyCustomFields,
+      historyDocTypeName,
+      historyLanguage
+    )
+  ];
+
+  if (analysis.metrics) {
+    persistenceTasks.push(
+      documentModel.addOpenAIMetrics(
+        docId,
+        analysis.metrics.promptTokens,
+        analysis.metrics.completionTokens,
+        analysis.metrics.totalTokens
+      )
+    );
+  }
+
+  await Promise.all(persistenceTasks);
 }
 
 // Main scanning functions
@@ -807,7 +827,9 @@ async function scanInitial() {
         const { analysis, originalData } = result;
         const updateData = await buildUpdateData(analysis, doc);
         await saveDocumentChanges(doc.id, updateData, analysis, originalData);
+        await documentModel.setProcessingStatus(doc.id, doc.title, 'complete');
       } catch (error) {
+        await documentModel.setProcessingStatus(doc.id, doc.title, 'failed');
         console.error(`[ERROR] processing document ${doc.id}: ${error.message}`);
         console.debug(error);
       }
@@ -879,8 +901,10 @@ async function scanDocuments(source = 'scheduler') {
         const { analysis, originalData } = result;
         const updateData = await buildUpdateData(analysis, doc);
         await saveDocumentChanges(doc.id, updateData, analysis, originalData);
+        await documentModel.setProcessingStatus(doc.id, doc.title, 'complete');
         scanStats.processed += 1;
       } catch (error) {
+        await documentModel.setProcessingStatus(doc.id, doc.title, 'failed');
         scanStats.failed += 1;
         console.error(`[ERROR] processing document ${doc.id}: ${error.message}`);
         console.debug(error);

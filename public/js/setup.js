@@ -32,6 +32,12 @@ class SetupWizard {
             allowFailure: false
         };
 
+        this.ocrTestState = {
+            ran: false,
+            success: false,
+            allowFailure: false
+        };
+
         this.metadataState = {
             loaded: false,
             tagNames: []
@@ -85,6 +91,7 @@ class SetupWizard {
         this.aiPresetHint = document.getElementById('aiPresetHint');
         this.aiProvider = document.getElementById('aiProvider');
         this.aiModel = document.getElementById('aiModel');
+        this.fetchAiModelsBtn = document.getElementById('fetchAiModelsBtn');
         this.aiApiUrl = document.getElementById('aiApiUrl');
         this.aiToken = document.getElementById('aiToken');
         this.testAiBtn = document.getElementById('testAiBtn');
@@ -92,8 +99,15 @@ class SetupWizard {
 
         this.mistralOcrEnabled = document.getElementById('mistralOcrEnabled');
         this.mistralFields = document.getElementById('mistralFields');
-        this.mistralApiKey = document.getElementById('mistralApiKey');
+        this.ocrProvider = document.getElementById('ocrProvider');
+        this.ocrApiUrl = document.getElementById('ocrApiUrl');
+        this.ocrApiUrlContainer = document.getElementById('ocrApiUrlContainer');
+        this.ocrApiKeyContainer = document.getElementById('ocrApiKeyContainer');
+        this.ocrApiKey = document.getElementById('ocrApiKey');
         this.mistralOcrModel = document.getElementById('mistralOcrModel');
+        this.fetchOcrModelsBtn = document.getElementById('fetchOcrModelsBtn');
+        this.testOcrBtn = document.getElementById('testOcrBtn');
+        this.ocrTestStatePill = document.getElementById('ocrTestState');
 
         this.envPreview = document.getElementById('envPreview');
         this.copyEnvPreviewBtn = document.getElementById('copyEnvPreviewBtn');
@@ -146,6 +160,10 @@ class SetupWizard {
 
         const mistralEnabled = this.config.MISTRAL_OCR_ENABLED === 'yes';
         this.mistralOcrEnabled.value = mistralEnabled ? 'yes' : 'no';
+        const rawOcrProvider = (this.config.OCR_PROVIDER || 'mistral').toLowerCase();
+        this.ocrProvider.value = rawOcrProvider === 'ollama' ? 'custom' : rawOcrProvider;
+        this.ocrApiUrl.value = this.config.OCR_API_URL || '';
+        this.setModelSelectOptions(this.mistralOcrModel, [this.config.MISTRAL_OCR_MODEL || 'mistral-ocr-latest'], 'Select OCR model');
         this.mistralOcrModel.value = this.config.MISTRAL_OCR_MODEL || 'mistral-ocr-latest';
         this.processedTag.value = this.config.AI_PROCESSED_TAG_NAME || 'ai-processed';
     }
@@ -176,38 +194,68 @@ class SetupWizard {
     bindEvents() {
         this.prevBtn.addEventListener('click', () => this.goToPreviousStep());
         this.nextBtn.addEventListener('click', () => this.goToNextStep());
+            this.setModelSelectOptions(this.aiModel, [], 'Select model');
 
         this.adminPassword.addEventListener('input', () => this.updatePasswordHint());
         this.confirmPassword.addEventListener('input', () => this.updatePasswordHint());
 
         this.enableMfa.addEventListener('change', () => this.updateMfaPanelVisibility());
-        this.startMfaSetupBtn.addEventListener('click', () => this.startMfaSetup());
+        this.setModelSelectOptions(this.aiModel, preset.model ? [preset.model] : [], 'Select model');
+        this.aiModel.value = preset.model || '';
         this.confirmMfaCodeBtn.addEventListener('click', () => this.confirmMfaCode());
 
         this.testPaperlessBtn.addEventListener('click', () => this.testPaperlessConnection());
         this.fetchMetadataBtn.addEventListener('click', () => this.loadPaperlessMetadata());
-        this.scanAllDocuments.addEventListener('change', () => this.toggleIncludeTagField());
-
+    setModelSelectOptions(selectElement, values, emptyLabel = 'Select model') {
+        if (!selectElement) {
         this.addExcludeTagBtn.addEventListener('click', () => this.addExcludeTag(this.excludeTagInput.value));
         this.excludeTagInput.addEventListener('keypress', (event) => {
             if (event.key === 'Enter') {
-                event.preventDefault();
+        selectElement.innerHTML = '';
+        const normalizedValues = (Array.isArray(values) ? values : [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = emptyLabel;
+        emptyOption.selected = normalizedValues.length === 0;
+        selectElement.appendChild(emptyOption);
+
+        const unique = Array.from(new Set(normalizedValues));
+        unique.forEach((value) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            selectElement.appendChild(option);
+        });
+
+        if (unique.length > 0) {
+            selectElement.value = unique[0];
+        } else {
+            selectElement.value = '';
+        }
+    }
+
+    fillDatalist(_datalistElement, values) {
+        if (!this.aiModel) {
                 this.addExcludeTag(this.excludeTagInput.value);
             }
         });
-
-        this.excludeProcessedTagBtn.addEventListener('click', () => {
-            this.addExcludeTag(this.processedTag.value);
-        });
-
-        this.aiPreset.addEventListener('change', () => {
-            const selected = this.presets.find((preset) => preset.id === this.aiPreset.value);
-            this.applyPreset(selected || null);
+        this.setModelSelectOptions(this.aiModel, values, 'Select model');
         });
 
         this.testAiBtn.addEventListener('click', () => this.testAiConnection());
+        if (this.fetchAiModelsBtn) {
+            this.fetchAiModelsBtn.addEventListener('click', () => this.fetchAiModels());
+        }
 
         this.mistralOcrEnabled.addEventListener('change', () => this.toggleMistralFields());
+        this.ocrProvider.addEventListener('change', () => this.toggleMistralFields());
+        this.testOcrBtn.addEventListener('click', () => this.testOcrConnection());
+        if (this.fetchOcrModelsBtn) {
+            this.fetchOcrModelsBtn.addEventListener('click', () => this.fetchOcrModels());
+        }
 
         this.copyEnvPreviewBtn.addEventListener('click', () => this.copyEnvPreview());
         this.finalizeSetupBtn.addEventListener('click', () => this.finalizeSetup());
@@ -322,6 +370,56 @@ class SetupWizard {
     toggleMistralFields() {
         const enabled = this.mistralOcrEnabled.value === 'yes';
         this.mistralFields.classList.toggle('hidden', !enabled);
+
+        const provider = (this.ocrProvider.value || 'mistral').toLowerCase();
+        if (this.ocrApiKeyContainer) {
+            this.ocrApiKeyContainer.classList.toggle('hidden', !enabled);
+        }
+
+        if (this.ocrApiUrlContainer) {
+            this.ocrApiUrlContainer.classList.toggle('hidden', provider !== 'custom' || !enabled);
+        }
+    }
+
+    async testOcrConnection() {
+        const payload = {
+            enabled: this.mistralOcrEnabled.value === 'yes',
+            provider: (this.ocrProvider.value || 'mistral').toLowerCase(),
+            apiUrl: this.ocrApiUrl.value.trim(),
+            apiKey: this.ocrApiKey.value.trim(),
+            model: this.mistralOcrModel.value.trim() || 'mistral-ocr-latest'
+        };
+
+        if (!payload.enabled) {
+            this.setPillState(this.ocrTestStatePill, 'success', 'Disabled (skipped)');
+            this.ocrTestState.ran = true;
+            this.ocrTestState.success = true;
+            return;
+        }
+
+        this.setButtonLoading(this.testOcrBtn, true, 'Testing...');
+        this.setPillState(this.ocrTestStatePill, 'loading', 'Testing...');
+
+        try {
+            const result = await this.request('/api/setup/ocr/test', payload);
+            this.ocrTestState.ran = true;
+            this.ocrTestState.success = Boolean(result.success);
+
+            if (result.success) {
+                this.setPillState(this.ocrTestStatePill, 'success', 'Connection valid');
+                await this.showPopup({ icon: 'success', title: 'OCR test successful', text: result.message || 'OCR provider is reachable.' });
+            } else {
+                this.setPillState(this.ocrTestStatePill, 'error', 'Test failed');
+                await this.showPopup({ icon: 'error', title: 'OCR test failed', text: result.message || 'OCR connection test failed.' });
+            }
+        } catch (error) {
+            this.ocrTestState.ran = true;
+            this.ocrTestState.success = false;
+            this.setPillState(this.ocrTestStatePill, 'error', 'Test failed');
+            await this.showPopup({ icon: 'error', title: 'OCR test failed', text: error.message });
+        } finally {
+            this.setButtonLoading(this.testOcrBtn, false);
+        }
     }
 
     setPillState(element, type, text) {
@@ -564,7 +662,111 @@ class SetupWizard {
         this.aiPresetHint.textContent = `Preset "${preset.label}" selected.${this.aiProvider.value === 'custom' ? ' Token can stay empty if your endpoint allows anonymous access.' : ''}`;
     }
 
+    fillDatalist(datalistElement, values) {
+        if (!datalistElement) {
+            return;
+        }
+
+        datalistElement.innerHTML = '';
+        (Array.isArray(values) ? values : []).forEach((value) => {
+            const option = document.createElement('option');
+            option.value = String(value || '').trim();
+            if (option.value) {
+                datalistElement.appendChild(option);
+            }
+        });
+    }
+
+    async fetchAiModels(silent = false) {
+        const payload = {
+            aiProvider: this.aiProvider.value.trim().toLowerCase(),
+            apiUrl: this.aiApiUrl.value.trim(),
+            token: this.aiToken.value.trim()
+        };
+
+        if (!payload.aiProvider) {
+            if (!silent) {
+                await this.showPopup({ icon: 'warning', title: 'Provider missing', text: 'Select an AI provider first.' });
+            }
+            return [];
+        }
+
+        if (!['openai', 'azure'].includes(payload.aiProvider) && !payload.apiUrl) {
+            if (!silent) {
+                await this.showPopup({ icon: 'warning', title: 'API URL missing', text: 'Enter API URL first.' });
+            }
+            return [];
+        }
+
+        this.setButtonLoading(this.fetchAiModelsBtn, true, 'Loading...');
+        try {
+            const result = await this.request('/api/setup/ai/models', payload);
+            const models = Array.isArray(result.models) ? result.models : [];
+            this.setModelSelectOptions(this.aiModel, models, 'Select model');
+
+            if (!silent) {
+                await this.showPopup({
+                    icon: models.length > 0 ? 'success' : 'info',
+                    title: 'AI models loaded',
+                    text: result.message || (models.length > 0 ? 'Models discovered successfully.' : 'No models found.')
+                });
+            }
+
+            return models;
+        } catch (error) {
+            if (!silent) {
+                await this.showPopup({ icon: 'error', title: 'Failed to load AI models', text: error.message });
+            }
+            return [];
+        } finally {
+            this.setButtonLoading(this.fetchAiModelsBtn, false);
+        }
+    }
+
+    async fetchOcrModels(silent = false) {
+        const payload = {
+            provider: (this.ocrProvider.value || 'mistral').toLowerCase(),
+            apiUrl: this.ocrApiUrl.value.trim(),
+            apiKey: this.ocrApiKey.value.trim()
+        };
+
+        if (payload.provider === 'mistral' && !payload.apiKey) {
+            if (!silent) {
+                await this.showPopup({ icon: 'warning', title: 'API key missing', text: 'Mistral OCR requires an API key to discover models.' });
+            }
+            return [];
+        }
+
+        this.setButtonLoading(this.fetchOcrModelsBtn, true, 'Loading...');
+        try {
+            const result = await this.request('/api/setup/ocr/models', payload);
+            const models = Array.isArray(result.models) ? result.models : [];
+            this.setModelSelectOptions(this.mistralOcrModel, models, 'Select OCR model');
+
+            if (!silent) {
+                await this.showPopup({
+                    icon: models.length > 0 ? 'success' : 'info',
+                    title: 'OCR models loaded',
+                    text: result.message || (models.length > 0 ? 'OCR models discovered successfully.' : 'No OCR models found.')
+                });
+            }
+
+            return models;
+        } catch (error) {
+            if (!silent) {
+                await this.showPopup({ icon: 'error', title: 'Failed to load OCR models', text: error.message });
+            }
+            return [];
+        } finally {
+            this.setButtonLoading(this.fetchOcrModelsBtn, false);
+        }
+    }
+
     async testAiConnection() {
+        if (!this.aiModel.value.trim()) {
+            await this.fetchAiModels(true);
+        }
+
         const payload = {
             aiProvider: this.aiProvider.value.trim().toLowerCase(),
             apiUrl: this.aiApiUrl.value.trim(),
@@ -692,6 +894,10 @@ class SetupWizard {
         }
 
         if (stepIndex === 4) {
+            if (!this.aiModel.value.trim()) {
+                await this.fetchAiModels(true);
+            }
+
             if (!this.aiProvider.value.trim() || !this.aiApiUrl.value.trim() || !this.aiModel.value.trim()) {
                 await this.showPopup({ icon: 'warning', title: 'Missing values', text: 'Provider, API URL, and model are required.' });
                 return false;
@@ -724,8 +930,18 @@ class SetupWizard {
         }
 
         if (stepIndex === 5) {
-            if (this.mistralOcrEnabled.value === 'yes' && !this.mistralApiKey.value.trim()) {
+            const provider = (this.ocrProvider.value || 'mistral').toLowerCase();
+            if (this.mistralOcrEnabled.value === 'yes' && provider === 'mistral' && !this.ocrApiKey.value.trim()) {
                 await this.showPopup({ icon: 'warning', title: 'Mistral API key required', text: 'Enter the Mistral API key or disable OCR fallback.' });
+                return false;
+            }
+
+            if (this.mistralOcrEnabled.value === 'yes' && !this.mistralOcrModel.value.trim()) {
+                await this.fetchOcrModels(true);
+            }
+
+            if (!['mistral', 'custom'].includes(provider)) {
+                await this.showPopup({ icon: 'warning', title: 'Invalid OCR provider', text: 'Choose either mistral or custom for OCR fallback.' });
                 return false;
             }
             return true;
@@ -768,7 +984,10 @@ class SetupWizard {
         }
 
         preview.push(`MISTRAL_OCR_ENABLED=${this.mistralOcrEnabled.value === 'yes' ? 'yes' : 'no'}`);
-        preview.push(`MISTRAL_API_KEY=${this.mistralApiKey.value.trim()}`);
+        const normalizedOcrProvider = (this.ocrProvider.value || 'mistral').toLowerCase();
+        preview.push(`OCR_PROVIDER=${normalizedOcrProvider === 'custom' ? 'custom' : 'mistral'}`);
+        preview.push(`OCR_API_URL=${this.ocrApiUrl.value.trim()}`);
+        preview.push(`OCR_API_KEY=${this.ocrApiKey.value.trim()}`);
         preview.push(`MISTRAL_OCR_MODEL=${this.mistralOcrModel.value.trim() || 'mistral-ocr-latest'}`);
 
         return preview.join('\n');
@@ -812,7 +1031,9 @@ class SetupWizard {
             allowFailedPaperlessTest: this.paperlessTestState.allowFailure,
             allowFailedAiTest: this.aiTestState.allowFailure,
             mistralOcrEnabled: this.mistralOcrEnabled.value === 'yes',
-            mistralApiKey: this.mistralApiKey.value.trim(),
+            ocrProvider: (this.ocrProvider.value || 'mistral').toLowerCase(),
+            ocrApiUrl: this.ocrApiUrl.value.trim(),
+            ocrApiKey: this.ocrApiKey.value.trim(),
             mistralOcrModel: this.mistralOcrModel.value.trim() || 'mistral-ocr-latest'
         };
     }

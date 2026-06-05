@@ -155,6 +155,7 @@ class OllamaService {
 
             // Process response
             const parsedResponse = this._processOllamaResponse(response);
+            const metrics = this._extractOllamaMetrics(response);
 
             // Check for missing data
             if (parsedResponse.tags.length === 0 && parsedResponse.correspondent === null) {
@@ -167,11 +168,7 @@ class OllamaService {
             // Return results in consistent format
             return {
                 document: parsedResponse,
-                metrics: {
-                    promptTokens: 0,  // Ollama doesn't provide token metrics
-                    completionTokens: 0,
-                    totalTokens: 0
-                },
+                metrics,
                 truncated: false
             };
         } catch (error) {
@@ -211,6 +208,7 @@ class OllamaService {
 
             // Process response
             const parsedResponse = this._processOllamaResponse(response);
+            const metrics = this._extractOllamaMetrics(response);
 
             // Check for missing data
             if (parsedResponse.tags.length === 0 && parsedResponse.correspondent === null) {
@@ -220,11 +218,7 @@ class OllamaService {
             // Return results in consistent format
             return {
                 document: parsedResponse,
-                metrics: {
-                    promptTokens: 0,
-                    completionTokens: 0,
-                    totalTokens: 0
-                },
+                metrics,
                 truncated: false
             };
         } catch (error) {
@@ -628,6 +622,22 @@ class OllamaService {
         } else {
             throw new Error('No response data from Ollama API');
         }
+    }
+
+    /**
+     * Extract token usage metrics from an Ollama /api/generate response.
+     * @param {Object} responseData - Ollama API response data
+     * @returns {{promptTokens:number, completionTokens:number, totalTokens:number}}
+     */
+    _extractOllamaMetrics(responseData) {
+        const promptTokens = Number(responseData?.prompt_eval_count) || 0;
+        const completionTokens = Number(responseData?.eval_count) || 0;
+
+        return {
+            promptTokens,
+            completionTokens,
+            totalTokens: promptTokens + completionTokens
+        };
     }
 
     /**
