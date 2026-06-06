@@ -194,23 +194,38 @@ class SetupWizard {
     bindEvents() {
         this.prevBtn.addEventListener('click', () => this.goToPreviousStep());
         this.nextBtn.addEventListener('click', () => this.goToNextStep());
-            this.setModelSelectOptions(this.aiModel, [], 'Select model');
+        this.setModelSelectOptions(this.aiModel, [], 'Select model');
 
         this.adminPassword.addEventListener('input', () => this.updatePasswordHint());
         this.confirmPassword.addEventListener('input', () => this.updatePasswordHint());
 
         this.enableMfa.addEventListener('change', () => this.updateMfaPanelVisibility());
-        this.setModelSelectOptions(this.aiModel, preset.model ? [preset.model] : [], 'Select model');
-        this.aiModel.value = preset.model || '';
         this.confirmMfaCodeBtn.addEventListener('click', () => this.confirmMfaCode());
 
         this.testPaperlessBtn.addEventListener('click', () => this.testPaperlessConnection());
         this.fetchMetadataBtn.addEventListener('click', () => this.loadPaperlessMetadata());
+
+        this.testAiBtn.addEventListener('click', () => this.testAiConnection());
+        if (this.fetchAiModelsBtn) {
+            this.fetchAiModelsBtn.addEventListener('click', () => this.fetchAiModels());
+        }
+
+        this.mistralOcrEnabled.addEventListener('change', () => this.toggleMistralFields());
+        this.ocrProvider.addEventListener('change', () => this.toggleMistralFields());
+        this.testOcrBtn.addEventListener('click', () => this.testOcrConnection());
+        if (this.fetchOcrModelsBtn) {
+            this.fetchOcrModelsBtn.addEventListener('click', () => this.fetchOcrModels());
+        }
+
+        this.copyEnvPreviewBtn.addEventListener('click', () => this.copyEnvPreview());
+        this.finalizeSetupBtn.addEventListener('click', () => this.finalizeSetup());
+    }
+
     setModelSelectOptions(selectElement, values, emptyLabel = 'Select model') {
         if (!selectElement) {
-        this.addExcludeTagBtn.addEventListener('click', () => this.addExcludeTag(this.excludeTagInput.value));
-        this.excludeTagInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
+            return;
+        }
+
         selectElement.innerHTML = '';
         const normalizedValues = (Array.isArray(values) ? values : [])
             .map((value) => String(value || '').trim())
@@ -230,35 +245,7 @@ class SetupWizard {
             selectElement.appendChild(option);
         });
 
-        if (unique.length > 0) {
-            selectElement.value = unique[0];
-        } else {
-            selectElement.value = '';
-        }
-    }
-
-    fillDatalist(_datalistElement, values) {
-        if (!this.aiModel) {
-                this.addExcludeTag(this.excludeTagInput.value);
-            }
-        });
-        this.setModelSelectOptions(this.aiModel, values, 'Select model');
-        });
-
-        this.testAiBtn.addEventListener('click', () => this.testAiConnection());
-        if (this.fetchAiModelsBtn) {
-            this.fetchAiModelsBtn.addEventListener('click', () => this.fetchAiModels());
-        }
-
-        this.mistralOcrEnabled.addEventListener('change', () => this.toggleMistralFields());
-        this.ocrProvider.addEventListener('change', () => this.toggleMistralFields());
-        this.testOcrBtn.addEventListener('click', () => this.testOcrConnection());
-        if (this.fetchOcrModelsBtn) {
-            this.fetchOcrModelsBtn.addEventListener('click', () => this.fetchOcrModels());
-        }
-
-        this.copyEnvPreviewBtn.addEventListener('click', () => this.copyEnvPreview());
-        this.finalizeSetupBtn.addEventListener('click', () => this.finalizeSetup());
+        selectElement.value = unique.length > 0 ? unique[0] : '';
     }
 
     getPopupThemeOptions() {
