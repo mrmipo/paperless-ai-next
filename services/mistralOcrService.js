@@ -137,7 +137,7 @@ class MistralOcrService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 7200000 // 2 minute timeout for large documents
+          timeout: 7200000 // 2 hour timeout for large documents
         }
       );
     } catch (error) {

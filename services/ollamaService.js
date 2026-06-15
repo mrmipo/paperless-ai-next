@@ -576,7 +576,7 @@ class OllamaService {
                 top_p: 0.9,
                 repeat_penalty: 1.1,
                 top_k: 7,
-                num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.floor(Number(config.responseTokens)) : 8192,
+                num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.max(1, Math.floor(Number(config.responseTokens))) : 1000,
                 num_ctx: numCtx
             }
         };
@@ -700,11 +700,11 @@ class OllamaService {
 
         const lastBrace = fenceCleaned.lastIndexOf('}');
         if (lastBrace !== -1 && lastBrace > firstBrace) {
-            // Próba ucięcia na ostatniej klamrze, jeśli istnieje
+            // Attempt to truncate at the last closing brace, if it exists
             return fenceCleaned.slice(firstBrace, lastBrace + 1);
         }
 
-        // Jeśli nie ma klamry zamykającej (bo ucięło output), bierzemy wszystko od pierwszej klamry otwierającej
+        // If there is no closing brace (truncated output), take everything from the first opening brace
         return fenceCleaned.slice(firstBrace);
     }
 
@@ -796,7 +796,7 @@ class OllamaService {
             return `: "${clearValue}"${suffix}`;
         });
 
-        // 4. Usuwanie wiszących przecinków przed klamrami/nawiasami
+        // 4. Remove trailing commas before braces/brackets
         cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
 
         return cleaned;
@@ -804,7 +804,7 @@ class OllamaService {
 
 
     /**
-     * Pomocnicza metoda mapująca (zapewnia kompatybilność, jeśli występuje w nowym kodzie)
+     * Helper mapping method (ensures compatibility if referenced in new code)
      */
     _normalizeAnalysisResponse(parsedResponse) {
         const safeResponse = parsedResponse && typeof parsedResponse === 'object' ? parsedResponse : {};
@@ -857,7 +857,7 @@ class OllamaService {
                 options: {
                     temperature: config.aiTemperatureGeneration,
                     top_p: 0.9,
-                    num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.floor(Number(config.responseTokens)) : 8192,
+                    num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.max(1, Math.floor(Number(config.responseTokens))) : 1000,
                     num_ctx: numCtx
                 }
             };
