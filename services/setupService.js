@@ -14,18 +14,18 @@ class SetupService {
     this.runtimeOverridesPath = path.join(process.cwd(), 'data', 'runtime-overrides.json');
     this.configured = null; // Variable to store the configuration status
 
-    this.validationTimeoutMs = this.normalizeValidationTimeoutMs(process.env.SETUP_VALIDATION_TIMEOUT_MS, 30000);
+    this.validationTimeoutMs = this.normalizeValidationTimeoutMs(process.env.SETUP_VALIDATION_TIMEOUT_MS, 600000);
     this.setupOcrDetectionCache = new Map();
     this.setupAiDetectionCache = new Map();
   }
 
-  normalizeValidationTimeoutMs(rawValue, fallbackValue = 30000) {
+  normalizeValidationTimeoutMs(rawValue, fallbackValue = 600000) {
     const parsed = Number.parseInt(String(rawValue ?? ''), 10);
     if (!Number.isFinite(parsed)) {
       return fallbackValue;
     }
 
-    return Math.min(Math.max(parsed, 1000), 120000);
+    return Math.min(Math.max(parsed, 1000), 7200000);
   }
 
   getValidationTimeoutMs() {

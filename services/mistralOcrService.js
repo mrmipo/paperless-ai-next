@@ -137,12 +137,12 @@ class MistralOcrService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 120000 // 2 minute timeout for large documents
+          timeout: 7200000 // 2 minute timeout for large documents
         }
       );
     } catch (error) {
       if (isTimeoutError(error)) {
-        const timeoutMessage = buildTimeoutErrorMessage('OCR', 120000);
+        const timeoutMessage = buildTimeoutErrorMessage('OCR', 7200000);
         console.error(`[TIMEOUT][OCR] Mistral OCR request timed out: ${error.message}`);
         throw new Error(timeoutMessage);
       }
@@ -214,7 +214,7 @@ class MistralOcrService {
           'Content-Type': 'application/json',
           ...authHeaders
         },
-        timeout: 120000
+        timeout: 7200000
       }
     );
 
@@ -262,7 +262,7 @@ class MistralOcrService {
             'Content-Type': 'application/json',
             ...authHeaders
           },
-          timeout: 120000
+          timeout: 7200000
         }
       );
 
@@ -301,7 +301,7 @@ class MistralOcrService {
       } catch (error) {
         if (isTimeoutError(error)) {
           console.error(`[TIMEOUT][OCR] Local OCR request timed out: ${error.message}`);
-          lastError = new Error(buildTimeoutErrorMessage('OCR', 120000));
+          lastError = new Error(buildTimeoutErrorMessage('OCR', 7200000));
           continue;
         }
         lastError = error;

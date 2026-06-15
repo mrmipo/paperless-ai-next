@@ -217,7 +217,7 @@ class SetupWizard {
 
     getNormalizedTimeoutSeconds(rawValue, fallbackMs = 30000) {
         const parsed = Number.parseInt(String(rawValue || '').trim(), 10);
-        const normalizedMs = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1000), 120000) : fallbackMs;
+        const normalizedMs = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1000), 7200000) : fallbackMs;
         return String(Math.round(normalizedMs / 1000));
     }
 
@@ -233,7 +233,7 @@ class SetupWizard {
 
     getTimeoutMs(inputElement, fallbackSeconds = 30) {
         const rawSeconds = Number.parseInt(String(inputElement?.value || String(fallbackSeconds)).trim(), 10);
-        const normalizedSeconds = Number.isFinite(rawSeconds) ? Math.min(Math.max(rawSeconds, 1), 120) : 30;
+        const normalizedSeconds = Number.isFinite(rawSeconds) ? Math.min(Math.max(rawSeconds, 1), 7200) : 30;
         return normalizedSeconds * 1000;
     }
 
@@ -1163,8 +1163,8 @@ class SetupWizard {
 
         if (stepIndex === 4) {
             const timeoutSeconds = Number.parseInt(String(this.aiValidationTimeout.value || '30').trim(), 10);
-            if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 120) {
-                await this.showPopup({ icon: 'warning', title: 'Invalid timeout', text: 'Timeout must be between 1 and 120 seconds.' });
+            if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 7200) {
+                await this.showPopup({ icon: 'warning', title: 'Invalid timeout', text: 'Timeout must be between 1 and 7200 seconds.' });
                 return false;
             }
 
@@ -1205,8 +1205,8 @@ class SetupWizard {
 
         if (stepIndex === 5) {
             const ocrTimeoutSeconds = Number.parseInt(String(this.ocrValidationTimeout?.value || '30').trim(), 10);
-            if (!Number.isFinite(ocrTimeoutSeconds) || ocrTimeoutSeconds < 1 || ocrTimeoutSeconds > 120) {
-                await this.showPopup({ icon: 'warning', title: 'Invalid OCR timeout', text: 'OCR timeout must be between 1 and 120 seconds.' });
+            if (!Number.isFinite(ocrTimeoutSeconds) || ocrTimeoutSeconds < 1 || ocrTimeoutSeconds > 7200) {
+                await this.showPopup({ icon: 'warning', title: 'Invalid OCR timeout', text: 'OCR timeout must be between 1 and 7200 seconds.' });
                 return false;
             }
 

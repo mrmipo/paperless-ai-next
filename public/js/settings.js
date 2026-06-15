@@ -1588,8 +1588,8 @@ function initializeFormHandlers() {
             const ocrEnabled = String(formData.get('mistralOcrEnabled') || 'no').trim().toLowerCase() === 'yes';
             const ocrProvider = String(formData.get('ocrProvider') || 'mistral').trim().toLowerCase();
             const ocrTimeoutSeconds = Number.parseInt(String(formData.get('ocrValidationTimeout') || '30').trim(), 10);
-            if (!Number.isFinite(ocrTimeoutSeconds) || ocrTimeoutSeconds < 1 || ocrTimeoutSeconds > 120) {
-                throw new Error('OCR timeout must be between 1 and 120 seconds.');
+            if (!Number.isFinite(ocrTimeoutSeconds) || ocrTimeoutSeconds < 1 || ocrTimeoutSeconds > 7200) {
+                throw new Error('OCR timeout must be between 1 and 7200 seconds.');
             }
             if (ocrEnabled && !String(formData.get('mistralOcrModel') || '').trim()) {
                 const payload = {

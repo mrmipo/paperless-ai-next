@@ -576,7 +576,7 @@ class OllamaService {
                 top_p: 0.9,
                 repeat_penalty: 1.1,
                 top_k: 7,
-                num_predict: 256,
+                num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.floor(Number(config.responseTokens)) : 8192,
                 num_ctx: numCtx
             }
         };
@@ -646,68 +646,177 @@ class OllamaService {
      * @returns {Object} Parsed object
      */
     _parseResponse(response) {
+        if (!response) {
+            return { tags: [], correspondent: null };
+        }
+
         try {
-            // Find JSON in response using regex
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-                return { tags: [], correspondent: null };
+            // 1. Extract the raw JSON substring candidate from the response payload
+            let candidate = this._extractJsonCandidate(response);
+            if (!candidate) {
+                throw new Error('No JSON object found in Ollama response.');
             }
 
-            let jsonStr = jsonMatch[0];
-            console.log('Extracted JSON String:', jsonStr);
-
+            // 2. Normalize string: strip markdown blocks, thinking tags, and escape internal unescaped quotes 
+            candidate = this._sanitizeJsonString(candidate);
+            
+            // 3. Validate JSON structure symmetry; execute stack-based delimiter balancing on partial chunks
             try {
-                // Attempt to parse the JSON
-                const result = JSON.parse(jsonStr);
-
-                // Validate and return the result
-                return {
-                    tags: Array.isArray(result.tags) ? result.tags : [],
-                    correspondent: result.correspondent || null,
-                    title: result.title || null,
-                    document_date: result.document_date || null,
-                    document_type: result.document_type || null,
-                    language: result.language || null,
-                    custom_fields: result.custom_fields || null
-                };
-
-            } catch (jsonError) {
-                console.warn('Error parsing JSON from response:', jsonError.message);
-                console.warn('Attempting to sanitize the JSON...');
-
-                // Sanitize the JSON
-                jsonStr = this._sanitizeJsonString(jsonStr);
-
-                try {
-                    const sanitizedResult = JSON.parse(jsonStr);
-                    return {
-                        tags: Array.isArray(sanitizedResult.tags) ? sanitizedResult.tags : [],
-                        correspondent: sanitizedResult.correspondent || null,
-                        title: sanitizedResult.title || null,
-                        document_date: sanitizedResult.document_date || null,
-                        language: sanitizedResult.language || null
-                    };
-                } catch (finalError) {
-                    console.error('Final JSON parsing failed after sanitization. This happens when the JSON structure is too complex or invalid. That indicates an issue with the generated JSON string by Ollama. Switch to OpenAI for better results or fine tune your prompt.');
-                    return { tags: [], correspondent: null };
-                }
+                JSON.parse(candidate);
+            } catch (_) {
+                console.warn('JSON invalid, attempting to balance delimiters...');
+                candidate = this._balanceJsonDelimiters(candidate);
             }
+
+            console.log('Extracted and Sanitized JSON String:', candidate);
+
+            // 4. Parse payload and map schema properties to native Paperless data structure 
+            const parsed = JSON.parse(candidate);
+            return this._normalizeAnalysisResponse(parsed);
+
         } catch (error) {
             console.error('Error parsing Ollama response:', error.message);
-            return { tags: [], correspondent: null };
+            return { tags: [], correspondent: null, title: null, custom_fields: null };
         }
     }
 
+
     /**
-     * Sanitize a JSON string
+     * Isolates the raw JSON candidate string boundary by identifying token fences.
+     * Extracts content between the first opening brace and the last closing brace,
+     * or falls back to capturing the trailing chunk if the stream is truncated.
+     *
+     * @param {string} raw - The raw string payload received from the LLM endpoint.
+     * @returns {string} The bounded JSON candidate substring or an empty string if unidentifiable.
+    */
+    _extractJsonCandidate(raw) {
+        const content = String(raw || '').trim();
+        const fenceCleaned = content.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+        const firstBrace = fenceCleaned.indexOf('{');
+
+        if (firstBrace === -1) {
+            return '';
+        }
+
+        const lastBrace = fenceCleaned.lastIndexOf('}');
+        if (lastBrace !== -1 && lastBrace > firstBrace) {
+            // Próba ucięcia na ostatniej klamrze, jeśli istnieje
+            return fenceCleaned.slice(firstBrace, lastBrace + 1);
+        }
+
+        // Jeśli nie ma klamry zamykającej (bo ucięło output), bierzemy wszystko od pierwszej klamry otwierającej
+        return fenceCleaned.slice(firstBrace);
+    }
+
+    /**
+     * Performs deterministic structural correction on truncated JSON strings.
+     * Evaluates scope nesting via an internal LIFO stack and mutates the payload
+     * by appending missing balancing brackets for malformed streams.
+     * 
+     * @param {string} jsonStr - The malformed or incomplete JSON target string.
+     * @returns {string} Syntactically balanced JSON structure.
+    */
+    _balanceJsonDelimiters(jsonStr) {
+        const stack = [];
+        let inString = false;
+        let escaped = false;
+        let balanced = String(jsonStr || '');
+
+        for (const char of balanced) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+
+            if (char === '\\') {
+                escaped = true;
+                continue;
+            }
+
+            if (char === '"') {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) {
+                continue;
+            }
+
+            if (char === '{' || char === '[') {
+                stack.push(char);
+                continue;
+            }
+
+            if (char === '}' || char === ']') {
+                const expected = char === '}' ? '{' : '[';
+                if (stack[stack.length - 1] === expected) {
+                    stack.pop();
+                }
+            }
+        }
+
+        // Purge dangling key-value definitions and trailing commas prior to appending missing bracket scopes
+        balanced = balanced.replace(/,\s*"[a-zA-Z0-9_-]+"\s*:\s*\{[^}]*$/s, '');
+        balanced = balanced.replace(/,\s*"[a-zA-Z0-9_-]+"\s*:\s*[^,}]*$/s, '');
+        balanced = balanced.replace(/,\s*[^\n,]*$/s, '');
+
+        // Pop outstanding openers from stack to dynamically append structural closers
+        while (stack.length > 0) {
+            const opener = stack.pop();
+            balanced += opener === '{' ? '}' : ']';
+        }
+
+        return balanced;
+    }
+
+    /**
+     * Sanitizes JSON payload strings by evaluating and stripping non-JSON structures,
+     * including LLM chain-of-thought XML wrappers and unescaped quote literals.
      * @param {string} jsonStr - JSON string to sanitize
      * @returns {string} Sanitized JSON string
-     */
+    */
+
     _sanitizeJsonString(jsonStr) {
-        return jsonStr
-            .replace(/,\s*}/g, '}') // Remove trailing commas before closing braces
-            .replace(/,\s*]/g, ']') // Remove trailing commas before closing brackets
-            .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":'); // Ensure property names are quoted
+        if (!jsonStr) return '{}';
+
+        let cleaned = String(jsonStr).trim();
+
+        // 1. Aggressively purge markdown/XML thinking tags (<think>, |thought|, thinking...) and execution metadata
+        cleaned = cleaned.replace(/<(?:thought|\|thought\||think)>[\s\S]*?<\/(?:thought|\|thought\||think)>/gi, '');
+        cleaned = cleaned.replace(/thinking\.\.\.[\s\S]*?done thinking\./gi, '');
+        cleaned = cleaned.replace(/^<think>[\s\S]*?<\/think>/gi, '');
+        cleaned = cleaned.replace(/^<think>[\s\S]*/gi, '');
+
+        // 2. Strip standard markdown code blocks syntax wraps
+        cleaned = cleaned.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+
+        // 3. Purge structural noise caused by internal unescaped quotation literals within value boundaries 
+        cleaned = cleaned.replace(/:\s*"([\s\S]*?)"\s*([,}\n])/g, (match, value, suffix) => {
+            const clearValue = value.replace(/\\"/g, '').replace(/"/g, '');
+            return `: "${clearValue}"${suffix}`;
+        });
+
+        // 4. Usuwanie wiszących przecinków przed klamrami/nawiasami
+        cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+        return cleaned;
+    }
+
+
+    /**
+     * Pomocnicza metoda mapująca (zapewnia kompatybilność, jeśli występuje w nowym kodzie)
+     */
+    _normalizeAnalysisResponse(parsedResponse) {
+        const safeResponse = parsedResponse && typeof parsedResponse === 'object' ? parsedResponse : {};
+        return {
+            tags: Array.isArray(safeResponse.tags) ? safeResponse.tags : [],
+            correspondent: safeResponse.correspondent || null,
+            title: safeResponse.title || null,
+            document_date: safeResponse.document_date || null,
+            document_type: safeResponse.document_type || null,
+            language: safeResponse.language || null,
+            custom_fields: safeResponse.custom_fields || null
+        };
     }
 
     /**
@@ -748,7 +857,7 @@ class OllamaService {
                 options: {
                     temperature: config.aiTemperatureGeneration,
                     top_p: 0.9,
-                    num_predict: 1024,
+                    num_predict: Number(config.responseTokens) && Number(config.responseTokens) > 0 ? Math.floor(Number(config.responseTokens)) : 8192,
                     num_ctx: numCtx
                 }
             };
